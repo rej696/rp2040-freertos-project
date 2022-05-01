@@ -1,28 +1,51 @@
 #include <FreeRTOS.h>
 #include <task.h>
+#include <queue.h>
 #include <stdio.h>
 #include "pico/stdlib.h"
 
+static QueueHandle_t xQueue = NULL;
 
 void led_task()
-{   
-    const uint LED_PIN = PICO_DEFAULT_LED_PIN;
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
-    while (true) {
-        gpio_put(LED_PIN, 1);
-        vTaskDelay(100);
-        gpio_put(LED_PIN, 0);
-        vTaskDelay(100);
-    }
+{
+  const uint LED_PIN = PICO_DEFAULT_LED_PIN;
+  uint uIValueToSend = 0;
+  gpio_init(LED_PIN);
+  gpio_set_dir(LED_PIN, GPIO_OUT);
+  while (1)
+  {
+    gpio_put(LED_PIN, 1);
+    uIValueToSend = 1;
+    xQueueSend(xQueue, &uIValueToSend, 0U);
+    vTaskDelay(100);
+
+    gpio_put(LED_PIN, 0);
+    uIValueToSend = 0;
+    xQueueSend(xQueue, &uIValueToSend, 0U);
+    vTaskDelay(100);
+  }
+}
+
+void usb_task(void *pvParameters)
+{
+  uint uIReceivedValue;
+
+  while (1)
+  {
+    xQueueReceive(xQueue, &uIReceivedValue, portMAX_DELAY);
+    printf("%s\n", (uIReceivedValue ? "LED is ON!" : "LED is OFF!"));
+  }
 }
 
 int main()
 {
-    stdio_init_all();
+  stdio_init_all();
 
-    xTaskCreate(led_task, "LED_Task", 256, NULL, 1, NULL);
-    vTaskStartScheduler();
+  xQueue = xQueueCreate(1, sizeof(uint));
 
-    while(1){};
+  xTaskCreate(led_task, "LED_Task", 256, NULL, 1, NULL);
+  xTaskCreate(usb_task, "USB_Task", 256, NULL, 1, NULL);
+  vTaskStartScheduler();
+
+  while(1){};
 }
